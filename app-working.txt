@@ -1,0 +1,45 @@
+Sindh Ombudsman AI Prototype — Technical Description
+What it is
+A single self-contained HTML file (~790 KB, no external dependencies, works offline) that prototypes AI-assisted complaint processing for the Provincial Ombudsman Sindh. It has two pages in one SPA: AI Complaint Processing and AI Settings, navigated via a dark-green left sidebar.
+
+Requests go directly from the browser to a user-configured LLM provider using the user's own API key. There is no backend and no fallback model — with no key entered, generation is unavailable.
+
+Page 1 — AI Complaint Processing
+A three-stage accordion, strictly one section expanded at a time. Collapsed sections show a status tag once their stage has run.
+
+01 Examination with AI. Complaint intake form: Type of Complaint (9 options, e.g. "Complaint u/s 10", "Reference by High Court"), Regional Office (20 Sindh offices), Complainant Name, Province, District, Taluka, Complaint Subject, Complaint Details. Plus a complaint-file uploader.
+
+Mandatory: Type of Complaint, Regional Office, Complaint Details. Missing fields produce an inline validation banner naming them, and no request is sent.
+
+On success the AI returns four separate outputs, all user-editable, each marked "AI Recommendation — not a final decision":
+
+Recommendation — a dropdown constrained to: May be Admitted / May be Not Admitted / May be Forwarded / May be Deferred
+Examination Remarks — free text
+Notification to Complainant — 200-char limit, with a live counter and an over-limit tag; individually regenerable
+Message to Investigation Officer — same treatment
+Any user edit sets an "Edited by user" tag.
+
+02 Findings with AI. Investigation Details textarea plus an investigation-records uploader where each file gets a free-text description that is passed to the model alongside the file's content. Requires Investigation Details. Output is a rich-text editable document (contentEditable with bold/italic/heading/list toolbar) under five fixed headings: Background, Admissibility, Investigation, Findings, Conclusion. Actions: Regenerate, Copy, Clear, "Use for Draft Decision" (jumps to stage 3).
+
+03 Draft Decision with AI. A mandatory "Final Decision / Directions" textarea — treated as authoritative substantive outcome; the prompt instructs the model it may improve language but must not alter the outcome. A context panel lists what is being carried into the request as chips (complaint info, files, investigation details, record count, whether Findings are as-generated or user-edited, the directions). Output is a rich-text editable draft under four fixed headings: 1. Complaint, 2. Proceedings, 3. Findings, 4. Decision.
+
+Page 2 — AI Settings
+API Configuration. Provider select with two entries — GPT-5.4 mini (OpenAI) → https://api.openai.com/v1/chat/completions, model gpt-5.4-mini; and DeepSeek-V4-Flash (DeepSeek) → https://api.deepseek.com/v1/chat/completions, model deepseek-v4-flash. Selecting a provider auto-fills endpoint and model ID; both remain editable. Fields: API Key (masked, with Reveal toggle), Model ID, Organization/Project ID (sent as OpenAI-Organization), Request Timeout (seconds, via AbortController), Maximum Output Tokens, Model Parameters (parsed from temperature=0.2, top_p=1 syntax into the request body). An "Active engine" banner states the live model and endpoint, or warns that no key is set. Test Connection makes a real call and reports the model name the provider echoes back.
+
+Global AI Instructions. A system-prompt preamble applied to all three use cases — no fabrication of facts, dates, evidence or legal provisions; formal administrative tone; flag incomplete or conflicting information; AI output is advisory.
+
+Use Case Instructions. Three tabs (Examination / Findings / Draft Decision). Each shows read-only chips for the available input context ({{complaint_details}}, {{investigation_files}}, {{final_findings}}, etc.), a read-only list of the expected output structure, and an editable instruction textarea with Reset to Default. Edits affect subsequent requests only.
+
+Request mechanics
+Every generation composes: Global Instructions + that use case's instructions + an output-format directive (JSON for Examination; an HTML fragment with fixed headings for Findings and Draft Decision) as the system message, and the assembled case record as the user message. Posted as OpenAI-compatible chat/completions.
+
+Robustness handling: retries with max_completion_tokens if the provider rejects max_tokens; reads text from message.content, array-style content parts, reasoning_content, or choices[0].text; distinguishes finish_reason: length (token budget exhausted) from a model/endpoint mismatch; converts network failures into an explicit CORS/endpoint message; enforces a minimum 512-token budget.
+
+File extraction
+Uploads are read client-side and their text is inlined into the prompt (capped at 6,000 chars per file): plain text formats directly, PDF via bundled pdf.js (first 25 pages), DOCX by unzipping and parsing word/document.xml with a hand-rolled ZIP reader. Images and scanned PDFs are listed as "not readable" and passed by filename only. Each file row shows extracted character count.
+
+State and design
+All state is in-memory React class state — nothing persists across reload, including the API key. Styling is inline-only, no CSS framework: dark green sidebar (#073b2a) with active item #16a34a, white rounded cards on #f4f6f8, green primary actions (#0f7b53), Archivo typeface. The sidebar's "Case Management" items (Insights, Users, Complaints, etc.) are deliberately inert placeholders at reduced opacity, present to mirror the real application's menu.
+
+Known limits
+The API key lives in browser memory, which is not acceptable for production — real deployment needs a server-side proxy holding credentials. Provider CORS policy determines whether direct calls work at all. The two model IDs are defaults and may not match a given account's naming.
